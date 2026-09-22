@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vocal Extractor — Make karaoke from any song</title>
+  <meta name="description" content="Remove vocals from any audio file and download a karaoke (instrumental) track. Runs 100% locally." />
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/app.js"></script>
+</head>
+<body>
+  <div class="bg-glow g1"></div>
+  <div class="bg-glow g2"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">🎤</div>
+      <div class="brand-text">
+        <h1>Vocal Extractor</h1>
+        <p>Drop a song, get the karaoke version</p>
+      </div>
+    </div>
+    <div class="server-pill" id="serverPill" title="Local AI server status">
+      <span class="dot" id="serverDot"></span>
+      <span id="serverText">checking server…</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ DROP ZONE ============ -->
+    <section class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload an audio file">
+      <input type="file" id="fileInput" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg,.opus,.webm,audio/*" hidden />
+      <div class="dz-inner">
+        <div class="dz-icon" aria-hidden="true">🎧</div>
+        <h2>Drop your audio here</h2>
+        <p>or <span class="dz-browse">click to browse</span> your files</p>
+        <small>MP3 · WAV · FLAC · M4A · AAC · OGG · OPUS — everything stays on your computer</small>
+      </div>
+    </section>
+
+    <!-- ============ WORKSPACE ============ -->
+    <section class="workspace hidden" id="workspace">
+      <div class="banner hidden" id="errorBanner" role="alert">
+        <span id="errorText"></span>
+        <button class="banner-close" id="errorClose" aria-label="Dismiss">×</button>
+      </div>
+
+      <!-- Track card -->
+      <div class="card track-card">
+        <div class="track-head">
+          <div class="track-meta">
+            <span class="track-name" id="trackName">—</span>
+            <span class="track-sub" id="trackSub">—</span>
+          </div>
+          <button class="btn ghost small" id="resetBtn" title="Load another song">↺ New song</button>
+        </div>
+
+        <canvas id="wave" class="wave" aria-label="Waveform — click to seek"></canvas>
+
+        <div class="transport">
+          <button class="play-btn" id="playBtn" aria-label="Play / pause">
+            <svg id="iconPlay" viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            <svg id="iconPause" viewBox="0 0 24 24" width="22" height="22" class="hidden"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+          </button>
+
+          <span class="time" id="curTime">0:00</span>
+
+          <div class="stem-chips" id="stemChips" role="tablist" aria-label="Choose track version">
+            <button class="chip active" data-stem="original">Original</button>
+            <button class="chip" data-stem="karaoke" disabled title="Extract first">Karaoke</button>
+            <button class="chip" data-stem="vocals" disabled title="Extract first">Vocals</button>
+          </div>
+
+          <span class="time dim" id="durTime">0:00</span>
+
+          <label class="volume" title="Volume">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+            <input type="range" id="vol" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Engine card -->
+      <div class="card engine-card">
+        <div class="engine-tabs" role="tablist">
+          <button class="tab active" id="tabInstant" data-tab="instant">
+            ⚡ Instant <small>in your browser</small>
+          </button>
+          <button class="tab" id="tabAi" data-tab="ai">
+            🧠 AI Studio <small>Demucs · local server</small>
+          </button>
+        </div>
+
+        <!-- Instant panel -->
+        <div class="panel" id="panelInstant">
+          <div class="slider-row">
+            <label for="strength">Vocal cancellation strength</label>
+            <output id="strengthVal" for="strength">90%</output>
+          </div>
+          <input type="range" id="strength" min="50" max="100" step="1" value="90" />
+          <p class="hint">
+            Uses a classic <strong>centre-channel cancellation</strong> trick: vocals usually sit
+            equally in both speakers, so subtracting the middle removes them. Instant and private,
+            but it also softens anything else in the centre (bass, drums). Best for clean stereo mixes.
+          </p>
+          <button class="btn primary" id="instantBtn">⚡ Extract karaoke now</button>
+        </div>
+
+        <!-- AI panel -->
+        <div class="panel hidden" id="panelAi">
+          <div class="field-row">
+            <label for="modelSel">AI model</label>
+            <select id="modelSel">
+              <option value="htdemucs">Fast — htdemucs (recommended)</option>
+              <option value="htdemucs_ft">Fine-tuned — htdemucs_ft (better, ~4× slower)</option>
+            </select>
+          </div>
+          <p class="hint" id="aiHint">Checking local AI server…</p>
+          <button class="btn primary" id="aiBtn">🧠 Separate with AI</button>
+        </div>
+
+        <!-- Job progress -->
+        <div class="job hidden" id="jobBox">
+          <div class="job-head">
+            <span id="jobLabel">Working…</span>
+            <span id="jobPct"></span>
+          </div>
+          <div class="progress" id="jobProgress">
+            <div id="jobBar"></div>
+          </div>
+          <div class="job-log" id="jobLog"></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="results hidden" id="results">
+        <div class="results-head">
+          <h3 id="resultsTitle">🎉 Your karaoke track is ready</h3>
+          <p id="resultsSub">Preview it above, then download below.</p>
+        </div>
+
+        <div class="stem-cards">
+          <article class="stem-card featured">
+            <div class="stem-icon">🎶</div>
+            <div class="stem-info">
+              <h4>Karaoke <span class="tag green">vocals removed</span></h4>
+              <p class="stem-meta" id="karaokeMeta">Instrumental track</p>
+            </div>
+            <div class="stem-actions">
+              <button class="btn small primary" data-listen="karaoke">▶ Listen</button>
+              <button class="btn small ghost" data-download="karaoke" data-fmt="wav">↓ WAV</button>
+              <button class="btn small ghost mp3-btn hidden" data-download="karaoke" data-fmt="mp3">↓ MP3</button>
+            </div>
+          </article>
+
+          <article class="stem-card">
+            <div class="stem-icon">🎤</div>
+            <div class="stem-info">
+              <h4 id="vocalsTitle">Vocals <span class="tag">centre channel</span></h4>
+              <p class="stem-meta" id="vocalsMeta">Isolated vocal-ish track</p>
+            </div>
+            <div class="stem-actions">
+              <button class="btn small primary" data-listen="vocals">▶ Listen</button>
+              <button class="btn small ghost" data-download="vocals" data-fmt="wav">↓ WAV</button>
+              <button class="btn small ghost mp3-btn hidden" data-download="vocals" data-fmt="mp3">↓ MP3</button>
+            </div>
+          </article>
+
+          <article class="stem-card">
+            <div class="stem-icon">📀</div>
+            <div class="stem-info">
+              <h4>Original <span class="tag">source</span></h4>
+              <p class="stem-meta" id="originalMeta">The untouched file</p>
+            </div>
+            <div class="stem-actions">
+              <button class="btn small primary" data-listen="original">▶ Listen</button>
+              <button class="btn small ghost" data-download="original" data-fmt="source">↓ Source</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INFO ============ -->
+    <section class="info">
+      <article class="info-card">
+        <div class="info-icon">⚡</div>
+        <h3>Instant mode</h3>
+        <p>Runs right in your tab — no server, no waiting. Uses phase cancellation, so results vary with the mix. Great for quick previews.</p>
+      </article>
+      <article class="info-card">
+        <div class="info-icon">🧠</div>
+        <h3>AI Studio mode</h3>
+        <p>Meta's Demucs neural network actually learns what a voice is, then rebuilds the instrumental around it. Studio-grade karaoke, still 100% offline.</p>
+      </article>
+      <article class="info-card">
+        <div class="info-icon">💡</div>
+        <h3>Tips for best results</h3>
+        <p>Use stereo files. Mono recordings can't be centre-cancelled (instant mode needs a warning sign). For tougher songs, pick the fine-tuned model.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <p>Everything runs locally on your machine — your music never leaves this computer.</p>
+  </footer>
+
+  <audio id="player" preload="auto"></audio>
+</body>
+</html>
