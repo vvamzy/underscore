@@ -8,15 +8,14 @@ Everything runs **locally on your machine**; your audio never touches the intern
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
 
-> 💡 Screenshot slot — drop one into `docs/screenshot.png` and it appears here:
->
-> <img src="docs/screenshot.png" alt="Vocal Extractor UI" width="720"/>
+<img src="docs/player.png" alt="Vocal Extractor — drop a song, remove the vocals, download karaoke" width="720"/>
 
 ---
 
 ## ✨ Features
 
 - **Drop a song, get the karaoke version** — drag & drop, waveform preview, instant playback, WAV/MP3 download.
+  <img src="docs/download-options-wave-mp3.png" alt="Download the separated stems in WAV or MP3" width="620"/>
 - **Two separation engines**, from fast to studio-grade:
 
 | Mode | Where it runs | Quality | Speed |
@@ -25,6 +24,7 @@ Everything runs **locally on your machine**; your audio never touches the intern
 | 🧠 **AI Studio** | Local Python server running Meta's **Demucs** neural net | Studio-grade true vocal/instrumental separation | Seconds on GPU · minutes on CPU |
 
 - **Full job control** — watch the live server queue, see your position, **pause / resume** a running extraction (frees your CPU/GPU), or **cancel** it anytime.
+  <img src="docs/processing-queue.png" alt="Live server queue with pause / resume / cancel controls" width="620"/>
 - **Pick your compute device** — Auto, CPU-only, or GPU per job. The server auto-falls back to CPU if the GPU runs out of memory.
 - **Private by design** — binds to `127.0.0.1`, no cloud calls, no telemetry.
 
@@ -61,6 +61,8 @@ karaoke trick, made deeper (~15–20 dB of cancellation). Instant, offline, priv
 *Needs a **stereo** file.* Anything else panned centre (bass, snare, reverb) gets
 softened too, so results vary with the mix. Use the strength slider to tune it.
 
+<img src="docs/vocal-cancellation-options.png" alt="Instant mode vocal cancellation controls" width="620"/>
+
 ### 🧠 AI Studio mode (Demucs)
 `server.py` accepts your file, normalises it with FFmpeg, and runs
 [`demucs`](https://github.com/facebookresearch/demucs) (`--two-stems=vocals`) to produce
@@ -71,6 +73,8 @@ a real **instrumental** and an **isolated vocals** stem. Two models are selectab
 
 Device is selectable per job (**Auto / CPU only / GPU**); the server detects CUDA at
 startup and falls back to CPU automatically if a GPU job runs out of memory.
+
+<img src="docs/ai-mode-processing-cpu-gpu-auto.png" alt="AI mode device selection: Auto / CPU / GPU" width="620"/>
 
 The **first AI run downloads the model (~90 MB)** automatically; later runs are fully offline.
 
