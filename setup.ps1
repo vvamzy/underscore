@@ -95,8 +95,16 @@ if ($Gpu) {
 }
 
 Write-Host "  [3/4] Installing PyTorch for $target (this is the big download)" -ForegroundColor Cyan
-$torchArgs = @("-m", "pip", "install", "torch==2.3.1", "torchaudio==2.3.1")
-if ($Gpu) { $torchArgs += @("--index-url", "https://download.pytorch.org/whl/cu121") }
+# Pin the exact wheel build (+cu121 / +cpu) so a previously-installed build is
+# never mistaken for the target one (plain `torch==2.3.1` matches both).
+if ($Gpu) {
+    $torchArgs = @("-m", "pip", "install",
+        "torch==2.3.1+cu121", "torchaudio==2.3.1+cu121",
+        "--index-url", "https://download.pytorch.org/whl/cu121")
+} else {
+    $torchArgs = @("-m", "pip", "install",
+        "torch==2.3.1+cpu", "torchaudio==2.3.1+cpu")
+}
 & $venvPy @torchArgs
 if ($LASTEXITCODE -ne 0) { Write-Host "  PyTorch install failed." -ForegroundColor Red; exit 1 }
 
