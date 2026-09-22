@@ -24,6 +24,8 @@ Everything runs **locally on your machine**; your audio never touches the intern
 | ⚡ **Instant** | Web Audio, right in your tab | Good — phase-accurate centre-channel cancellation | ~1 second, zero setup |
 | 🧠 **AI Studio** | Local Python server running Meta's **Demucs** neural net | Studio-grade true vocal/instrumental separation | Seconds on GPU · minutes on CPU |
 
+- **Full job control** — watch the live server queue, see your position, **pause / resume** a running extraction (frees your CPU/GPU), or **cancel** it anytime.
+- **Pick your compute device** — Auto, CPU-only, or GPU per job. The server auto-falls back to CPU if the GPU runs out of memory.
 - **Private by design** — binds to `127.0.0.1`, no cloud calls, no telemetry.
 
 ## 🚀 Quick start (Windows)
@@ -67,6 +69,9 @@ a real **instrumental** and an **isolated vocals** stem. Two models are selectab
 - `htdemucs` — fast, great default
 - `htdemucs_ft` — fine-tuned, noticeably better on hard mixes, ~4× slower
 
+Device is selectable per job (**Auto / CPU only / GPU**); the server detects CUDA at
+startup and falls back to CPU automatically if a GPU job runs out of memory.
+
 The **first AI run downloads the model (~90 MB)** automatically; later runs are fully offline.
 
 ## 🗂️ Project structure
@@ -86,7 +91,7 @@ vocal-extractor/
 ## 🛠️ Tech stack
 
 - Frontend: vanilla HTML/CSS/JS + Web Audio API (no frameworks, no build step)
-- Backend: **FastAPI** + job queue (one separation at a time) + streaming progress
+- Backend: **FastAPI** + job queue (one at a time) with streaming progress, pause / resume / cancel (psutil)
 - Separation: **Demucs / htdemucs** (PyTorch), and a hand-rolled DSP centre-cancellation path
 - Audio I/O: FFmpeg
 
@@ -108,6 +113,7 @@ vocal-extractor/
 | Instant mode says **mono file** | The source has 1 channel — cancellation is impossible; use AI mode. |
 | GPU out of memory (4 GB cards) | The server auto-retries on CPU; or choose the `Fast` model. |
 | First AI run is slow | That's the one-time ~90 MB model download — cached afterwards. |
+| GPU option greyed out | CUDA isn't installed yet — run `setup.ps1 -Gpu` once (needs an NVIDIA GPU + driver ≥ 530). |
 
 ## 📄 License
 

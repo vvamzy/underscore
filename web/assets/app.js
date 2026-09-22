@@ -33,8 +33,10 @@
     panelInstant: $("panelInstant"), panelAi: $("panelAi"),
     strength: $("strength"), strengthVal: $("strengthVal"), instantBtn: $("instantBtn"),
     modelSel: $("modelSel"), aiHint: $("aiHint"), aiBtn: $("aiBtn"),
+    deviceSel: $("deviceSel"),
     jobBox: $("jobBox"), jobLabel: $("jobLabel"), jobPct: $("jobPct"),
     jobProgress: $("jobProgress"), jobBar: $("jobBar"), jobLog: $("jobLog"),
+    queueCard: $("queueCard"), queueSub: $("queueSub"), queueList: $("queueList"),
     results: $("results"), resultsTitle: $("resultsTitle"), resultsSub: $("resultsSub"),
     karaokeMeta: $("karaokeMeta"), vocalsTitle: $("vocalsTitle"),
     vocalsMeta: $("vocalsMeta"), originalMeta: $("originalMeta"),
@@ -52,7 +54,8 @@
     hoverX: null,
     dragging: false,
     raf: 0,
-    server: { online: false, demucs: false, device: null, detecting: true },
+    server: { online: false, demucs: false, device: null, detecting: true, cuda: false },
+    currentJob: null,
     urls: [],
   };
 
@@ -89,17 +92,34 @@
         demucs: !!h.demucs,
         device: h.device,
         detecting: !!h.detecting,
+        cuda: !!h.cuda,
       };
     } catch {
-      state.server = { online: false, demucs: false, device: null, detecting: false };
+      state.server = { online: false, demucs: false, device: null, detecting: false, cuda: false };
     }
     renderServer();
+    refreshQueue();
   }
+
+  function renderDeviceSelect() {
+    const gpuOpt = el.deviceSel && el.deviceSel.querySelector('option[value="gpu"]');
+    if (gpuOpt) {
+      gpuOpt.disabled = !state.server.cuda;
+      gpuOpt.textContent = state.server.cuda ? "GPU (CUDA)" : "GPU — not installed (run setup.ps1 -Gpu)";
+    }
+    if (el.deviceSel) el.deviceSel.disabled = !state.server.online || state.processing;
+  }
+
+  el.deviceSel.addEventListener("change", () => {
+    try { localStorage.setItem("ve.device", el.deviceSel.value); } catch { /* ignore */ }
+    renderServer();
+  });
 
   function renderServer() {
     const s = state.server;
     el.pill.classList.toggle("online", s.online);
     el.pill.classList.toggle("offline", !s.online);
+    renderDeviceSelect();
 
     if (s.online) {
       el.pillDot.classList.toggle("cpu", s.device !== "cuda");
@@ -184,6 +204,7 @@
     el.resetBtn.disabled = on;
     el.strength.disabled = on;
     el.modelSel.disabled = on;
+    el.deviceSel.disabled = on || !state.server.online;
     if (on) hideBanner();
     else renderServer();
   }
@@ -693,11 +714,13 @@
       const fd = new FormData();
       fd.append("file", state.file, state.file.name);
       const res = await fetch(
-        `${API}/api/separate?model=${encodeURIComponent(el.modelSel.value)}`,
+        `${API}/api/separate?model=${encodeURIComponent(el.modelSel.value)}&device=${encodeURIComponent(el.deviceSel.value)}`,
         { method: "POST", body: fd }
       );
       if (!res.ok) throw new Error(await readError(res));
       const { job_id } = await res.json();
+      state.currentJob = job_id;
+      refreshQueue();
 
       const model = el.modelSel.value === "htdemucs_ft" ? "Fine-tuned Demucs" : "Demucs";
 
@@ -720,6 +743,10 @@
             indeterminate: typeof j.percent !== "number",
             log: j.detail,
           });
+        } else if (j.status === "cancelled") {
+          jobUpdate({ label: "Cancelled", pct: 0, log: j.detail });
+          banner("Separation cancelled — nothing was saved.", "info");
+          break;
         } else if (j.status === "error") {
           throw new Error(j.detail || "Separation failed");
         } else if (j.status === "done") {
@@ -752,6 +779,8 @@
         "— check the start.ps1 window for details."
       );
     } finally {
+      state.currentJob = null;
+      refreshQueue();
       setProcessing(false);
     }
   });
@@ -825,6 +854,107 @@
     });
   });
 
+  /* -------------------- server queue panel -------------------- */
+  const Q_MODEL = { htdemucs: "Demucs", htdemucs_ft: "Demucs FT" };
+
+  function qBtn(label, act) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn small ghost q-btn";
+    b.dataset.act = act;
+    b.textContent = label;
+    return b;
+  }
+
+  function queueRow(j, mine) {
+    const wrap = document.createElement("div");
+    wrap.className = "queue-row" + (mine ? " mine" : "");
+    wrap.dataset.jid = j.id;
+
+    const name = document.createElement("span");
+    name.className = "q-name";
+    name.textContent = (mine ? "↑ " : "") + (j.filename || "(file)");
+
+    const chip = document.createElement("span");
+    chip.className = `q-chip ${j.paused ? "paused" : j.status}`;
+    chip.textContent = j.paused ? "paused" : j.status;
+
+    const prog = document.createElement("div");
+    prog.className = "q-progress";
+    const bar = document.createElement("div");
+    const pct = typeof j.percent === "number" ? j.percent : 0;
+    bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    prog.appendChild(bar);
+
+    const meta = document.createElement("span");
+    meta.className = "q-meta";
+    const parts = [Q_MODEL[j.model] || j.model];
+    if (j.device_used) parts.push(j.device_used.toUpperCase());
+    if (j.status === "queued" && j.position > 1) parts.push(`waiting · #${j.position}`);
+    meta.textContent = parts.join(" · ");
+
+    const acts = document.createElement("div");
+    acts.className = "q-actions";
+    if (j.status === "running") {
+      acts.appendChild(qBtn(j.paused ? "▶ Resume" : "⏸ Pause", j.paused ? "resume" : "pause"));
+      acts.appendChild(qBtn("✕ Cancel", "cancel"));
+    } else if (j.status === "queued") {
+      acts.appendChild(qBtn("✕ Cancel", "cancel"));
+    }
+
+    wrap.append(name, chip, prog, meta, acts);
+    return wrap;
+  }
+
+  function renderQueue(jobs) {
+    if (!state.server.online || !jobs.length) {
+      el.queueCard.classList.add("hidden");
+      return;
+    }
+    el.queueCard.classList.remove("hidden");
+    const active = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
+    el.queueSub.textContent = `${active} active · ${jobs.length - active} finished`;
+    el.queueList.textContent = "";
+    jobs.forEach((j) => el.queueList.appendChild(queueRow(j, state.currentJob === j.id)));
+  }
+
+  async function refreshQueue() {
+    if (!state.server.online) {
+      el.queueCard.classList.add("hidden");
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/api/queue`);
+      if (!res.ok) throw new Error("bad queue response");
+      const data = await res.json();
+      renderQueue(Array.isArray(data.jobs) ? data.jobs : []);
+    } catch {
+      // transient — keep last render, hide only when really offline
+      if (!state.server.online) el.queueCard.classList.add("hidden");
+    }
+  }
+
+  el.queueList.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".q-btn");
+    if (!btn) return;
+    const row = btn.closest(".queue-row");
+    if (!row) return;
+    const act = btn.dataset.act;
+    const jid = row.dataset.jid;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/jobs/${jid}/${act}`, { method: "POST" });
+      if (!res.ok) throw new Error(await readError(res));
+      await refreshQueue();
+      if (act === "cancel" && state.currentJob === jid) {
+        banner("Cancelling job…", "info");
+      }
+    } catch (err) {
+      banner(`Queue action failed: ${err && err.message ? err.message : err}`);
+      await refreshQueue();
+    }
+  });
+
   /* -------------------- global wiring -------------------- */
   let resizeTimer = 0;
   window.addEventListener("resize", () => {
@@ -835,6 +965,12 @@
     if (!document.hidden) checkHealth();
   });
   setInterval(checkHealth, 15000);
+  setInterval(refreshQueue, 2500);
+
+  try {
+    const saved = localStorage.getItem("ve.device");
+    if (saved && ["auto", "cpu", "gpu"].includes(saved)) el.deviceSel.value = saved;
+  } catch { /* ignore */ }
 
   checkHealth();
   drawWave();

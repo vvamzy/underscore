@@ -499,6 +499,73 @@ input[type="range"]::-moz-range-thumb {
 
 .stem-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ---------------- Server queue ---------------- */
+.queue-card { padding: 18px 20px; }
+.queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.queue-head h3 { margin: 0; font-size: 16px; }
+.queue-sub { font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+.queue-list { display: flex; flex-direction: column; gap: 8px; }
+
+.queue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 130px auto;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  position: relative;
+}
+.queue-row.mine { border-color: rgba(34, 211, 238, 0.45); }
+
+.q-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.q-meta { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+
+.q-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  justify-self: center;
+}
+.q-chip.queued   { background: rgba(251, 191, 36, 0.15); color: var(--amber); }
+.q-chip.running  { background: rgba(139, 92, 246, 0.18); color: #c4b5fd; }
+.q-chip.paused   { background: rgba(34, 211, 238, 0.15); color: var(--accent-3); }
+.q-chip.done     { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.q-chip.error    { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+.q-chip.cancelled{ background: rgba(255, 255, 255, 0.08); color: var(--text-dim); }
+
+.q-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.q-progress > div {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-3));
+  transition: width 0.4s ease;
+}
+
+.q-actions { display: flex; gap: 6px; }
+
 /* ---------------- Info section ---------------- */
 .info {
   display: grid;
@@ -535,6 +602,9 @@ footer {
   .engine-tabs { grid-template-columns: 1fr; }
   .tab small { display: none; }
   .stem-card { flex-direction: column; align-items: flex-start; }
+  .queue-row { grid-template-columns: 1fr auto; }
+  .queue-row .q-progress, .queue-row .q-actions { grid-column: 1 / -1; }
+  .queue-row .q-actions { justify-content: flex-end; }
 }
 
 @media (prefers-reduced-motion: reduce) {

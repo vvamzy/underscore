@@ -115,6 +115,14 @@
               <option value="htdemucs_ft">Fine-tuned — htdemucs_ft (better, ~4× slower)</option>
             </select>
           </div>
+          <div class="field-row">
+            <label for="deviceSel">Compute device</label>
+            <select id="deviceSel">
+              <option value="auto">Auto — use best available</option>
+              <option value="cpu">CPU only</option>
+              <option value="gpu">GPU (CUDA)</option>
+            </select>
+          </div>
           <p class="hint" id="aiHint">Checking local AI server…</p>
           <button class="btn primary" id="aiBtn">🧠 Separate with AI</button>
         </div>
@@ -131,6 +139,15 @@
           <div class="job-log" id="jobLog"></div>
         </div>
       </div>
+
+      <!-- Server queue -->
+      <section class="card queue-card hidden" id="queueCard">
+        <div class="queue-head">
+          <h3>🖥 Server queue</h3>
+          <span class="queue-sub" id="queueSub">—</span>
+        </div>
+        <div id="queueList" class="queue-list"></div>
+      </section>
 
       <!-- Results -->
       <div class="results hidden" id="results">
