@@ -1,5 +1,5 @@
 """
-Vocal Extractor — local AI server.
+Underscore — local AI server.
 
 Serves the web UI and runs Demucs (Meta's source-separation model) to split a song
 into a karaoke (instrumental) track + isolated vocals.
@@ -41,7 +41,7 @@ ALLOWED_MODELS = {"htdemucs", "htdemucs_ft"}
 ALLOWED_DEVICES = {"auto", "cpu", "gpu"}
 MAX_FINISHED_JOBS = 25
 
-app = FastAPI(title="Vocal Extractor Server", docs_url="/api/docs")
+app = FastAPI(title="Underscore Server", docs_url="/api/docs")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

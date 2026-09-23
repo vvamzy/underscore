@@ -1,6 +1,8 @@
-# 🎤 Vocal Extractor
+# 🎵 Underscore
 
-Turn any song into a **karaoke track** — remove the vocals, keep the music.
+*"Songs are something you vibe to; music is something you feel."* — vvamzy
+
+Turn any song into a **karaoke track** — the music underneath the vocals.
 Everything runs **locally on your machine**; your audio never touches the internet.
 
 ![Python 3.9–3.12](https://img.shields.io/badge/Python-3.9–3.12-blue)
@@ -8,7 +10,7 @@ Everything runs **locally on your machine**; your audio never touches the intern
 ![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green)
 
-<img src="docs/player.png" alt="Vocal Extractor — drop a song, remove the vocals, download karaoke" width="720"/>
+<img src="docs/player.png" alt="Underscore — drop a song, remove the vocals, download karaoke" width="720"/>
 
 ---
 
@@ -81,7 +83,7 @@ The **first AI run downloads the model (~90 MB)** automatically; later runs are 
 ## 🗂️ Project structure
 
 ```
-vocal-extractor/
+underscore/
 ├── web/                 the website (vanilla HTML/CSS/JS, no build step)
 │   ├── index.html
 │   └── assets/

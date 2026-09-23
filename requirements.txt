@@ -1,5 +1,5 @@
 # =============================================================
-#  Vocal Extractor — Python dependencies
+#  Underscore — Python dependencies
 #
 #  Python 3.9 – 3.12 (Windows). PyTorch is installed separately
 #  by setup.ps1 (CPU build by default; run `setup.ps1 -Gpu` for

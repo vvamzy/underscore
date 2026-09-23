@@ -1,5 +1,5 @@
 /* ============================================================
-   Vocal Extractor — dark, glassy, music-studio vibes
+   Underscore — dark, glassy, music-studio vibes
    ============================================================ */
 
 :root {
@@ -589,6 +589,12 @@ footer {
   padding: 26px 20px 40px;
   color: #666c82;
   font-size: 13px;
+}
+
+.footer-quote {
+  font-style: italic;
+  color: #8d93ab;
+  margin-bottom: 6px;
 }
 
 /* ---------------- Responsive ---------------- */

@@ -1,5 +1,5 @@
 <#
-  Vocal Extractor — one-time setup.
+  Underscore — one-time setup.
 
   Usage (from this folder):
       powershell -ExecutionPolicy Bypass -File setup.ps1          # CPU (default, ~250 MB)
@@ -15,7 +15,7 @@ $venvDir = Join-Path $root ".venv"
 $venvPy  = Join-Path $venvDir "Scripts\python.exe"
 
 Write-Host ""
-Write-Host "  Vocal Extractor - setup" -ForegroundColor Magenta
+Write-Host "  Underscore - setup" -ForegroundColor Magenta
 Write-Host "  ================================="
 Write-Host ""
 
