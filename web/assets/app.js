@@ -267,7 +267,7 @@
       const ext = (file.name.split(".").pop() || "?").toUpperCase();
       el.trackSub.textContent =
         `${ext} · ${fmtTime(buf.duration)} · ${buf.sampleRate} Hz · ` +
-        `${buf.numberOfChannels === 1 ? "mono" : buf.numberOfChannels + " ch"} · ${fmtSize(file.size)}`;
+        `${buf.numberOfChannels === 1 ? "⚠️ mono" : buf.numberOfChannels + " ch"} · ${fmtSize(file.size)}`;
       el.originalMeta.textContent = `${ext} · ${fmtTime(buf.duration)} · ${fmtSize(file.size)}`;
 
       state.stems.original = { url: URL.createObjectURL(file), blob: file };
