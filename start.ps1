@@ -46,8 +46,25 @@ if (-not $opened -and $job.State -eq "Running") {
     $opened = $true
 }
 
+# Uvicorn writes its logs to stderr. Inside a PowerShell job those appear as
+# error records, and with $ErrorActionPreference="Stop" the first log line
+# would kill the streaming loop. So collect them quietly and relay as plain
+# log lines instead of letting them abort the script.
+function Drain-JobOutput([object]$j) {
+    $errs = @()
+    Receive-Job $j -ErrorVariable +errs -ErrorAction SilentlyContinue |
+        ForEach-Object { Write-Host $_ }
+    $errs | ForEach-Object { Write-Host $_.Exception.Message }
+}
+
 try {
-    Receive-Job $job -Wait -Follow
+    # Stream the server's logs live. (`Receive-Job -Follow` isn't available on
+    # every PowerShell build, so poll instead — works on PS 5.1 and PS 7.)
+    while ($job.State -eq "Running") {
+        Drain-JobOutput $job
+        Start-Sleep -Milliseconds 400
+    }
+    Drain-JobOutput $job
 } finally {
     Stop-Job $job -ErrorAction SilentlyContinue
     Remove-Job $job -Force -ErrorAction SilentlyContinue
