@@ -1,5 +1,5 @@
 <#
-  Vocal Extractor — start the local website + AI server.
+  Underscore — start the local website + AI server.
 
   Usage:
       powershell -ExecutionPolicy Bypass -File start.ps1
@@ -18,7 +18,7 @@ if (-not (Test-Path $venvPy)) {
 }
 
 Write-Host ""
-Write-Host "  Starting Vocal Extractor on http://localhost:8000" -ForegroundColor Magenta
+Write-Host "  Starting Underscore on http://localhost:8000" -ForegroundColor Magenta
 Write-Host "  (Ctrl+C stops the server)"
 Write-Host ""
 

@@ -1,5 +1,5 @@
 /* ============================================================
-   Vocal Extractor — frontend
+   Underscore — frontend
    Two engines:
      ⚡ Instant : centre-channel cancellation, runs in the browser
      🧠 AI      : Demucs via the local server (server.py)
@@ -702,7 +702,7 @@
     if (!state.server.online) {
       await checkHealth();
       if (!state.server.online) {
-        banner("Can't reach the AI server. Run start.ps1 in the vocal-extractor folder, then try again.");
+        banner("Can't reach the AI server. Run start.ps1 in the underscore folder, then try again.");
         return;
       }
     }
