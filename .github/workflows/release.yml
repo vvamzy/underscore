@@ -70,7 +70,7 @@ jobs:
       # --- Start the server ---
       - name: Start uvicorn server
         run: |
-          .venv/Scripts/python.exe -m uvicorn server:app --host 127.0.0.1 --port 8000 &
+          python -m uvicorn server:app --host 127.0.0.1 --port 8000 &
         shell: bash
         continue-on-error: true
 
