@@ -19,6 +19,14 @@ Write-Host "  Underscore - setup" -ForegroundColor Magenta
 Write-Host "  ================================="
 Write-Host ""
 
+# ---------------------------------------------------------------- GPU choice (interactive)
+if (-not $Gpu) {
+    $gpuChoice = Read-Host "Install GPU (CUDA) support? (requires NVIDIA driver >= 530) [y/N]"
+    if ($gpuChoice -match '^y$|^yes$') {
+        $Gpu = $true
+    }
+}
+
 # ---------------------------------------------------------------- Python 3.9-3.12
 function Find-BasePython {
     $candidates = @()
