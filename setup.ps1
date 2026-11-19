@@ -103,7 +103,8 @@ if ($Gpu) {
         "--index-url", "https://download.pytorch.org/whl/cu121")
 } else {
     $torchArgs = @("-m", "pip", "install",
-        "torch==2.3.1+cpu", "torchaudio==2.3.1+cpu")
+        "torch==2.3.1+cpu", "torchaudio==2.3.1+cpu",
+        "--index-url", "https://download.pytorch.org/whl/cpu")
 }
 & $venvPy @torchArgs
 if ($LASTEXITCODE -ne 0) { Write-Host "  PyTorch install failed." -ForegroundColor Red; exit 1 }
