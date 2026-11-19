@@ -7,17 +7,11 @@
 #      pip install -r requirements.txt
 # =============================================================
 
-# Web server
-fastapi>=0.111
-uvicorn[standard]>=0.30
-python-multipart>=0.0.9
+-r requirements-server.txt
 
 # AI source separation (Meta Demucs)
 demucs==4.0.1
 soundfile>=0.12.1
-
-# Job control — pause / resume / cancel of running Demucs processes
-psutil>=5.9
 
 # NumPy 2.x breaks torch 2.3.x interop — keep 1.x
 numpy<2

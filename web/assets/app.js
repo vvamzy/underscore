@@ -14,11 +14,12 @@
   const tick = () => sleep(0);
 
   // Same-origin when served by the local server, otherwise talk to localhost.
-  const API = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(location.origin)
+  const API = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(location.origin)
     ? ""
     : "http://localhost:8000";
 
   const MAX_BYTES = 300 * 1024 * 1024;
+  const JOBS_PAGE_SIZE = 50;
 
   const el = {
     pill: $("serverPill"), pillDot: $("serverDot"), pillText: $("serverText"),
@@ -43,6 +44,7 @@
     player: $("player"),
     pastJobsBtn: $("pastJobsBtn"), jobsCard: $("jobsCard"),
     refreshJobsBtn: $("refreshJobsBtn"), jobsList: $("jobsList"), jobsEmpty: $("jobsEmpty"),
+    jobsCount: $("jobsCount"), moreJobsBtn: $("moreJobsBtn"),
   };
 
   const state = {
@@ -60,6 +62,8 @@
     currentJob: null,
     urls: [],
     pastJobsOpen: false,
+    pastJobs: [],
+    pastJobsLimit: JOBS_PAGE_SIZE,
   };
 
   /* -------------------- misc UI -------------------- */
@@ -102,7 +106,6 @@
     }
     renderServer();
     refreshQueue();
-    fetchPastJobs();
   }
 
   function renderDeviceSelect() {
@@ -944,7 +947,8 @@
       const res = await fetch(`${API}/api/past-jobs`);
       if (!res.ok) throw new Error("bad past-jobs response");
       const data = await res.json();
-      renderJobs(Array.isArray(data.jobs) ? data.jobs : []);
+      state.pastJobs = Array.isArray(data.jobs) ? data.jobs : [];
+      renderJobs();
     } catch {
       // silent — server may not have the endpoint yet on older installs
     }
@@ -952,15 +956,17 @@
 
   const JOB_MODEL = { htdemucs: "Demucs", htdemucs_ft: "Demucs FT" };
 
-  function renderJobs(jobs) {
+  function renderJobs() {
+    const jobs = state.pastJobs;
     el.jobsList.textContent = "";
-    if (el.jobsCount) el.jobsCount.textContent = `${jobs.length} job${jobs.length !== 1 ? "s" : ""}`;
+    el.jobsCount.textContent = `${jobs.length} job${jobs.length !== 1 ? "s" : ""}`;
+    el.moreJobsBtn.classList.toggle("hidden", jobs.length <= state.pastJobsLimit);
     if (!jobs.length) {
       el.jobsEmpty.classList.remove("hidden");
       return;
     }
     el.jobsEmpty.classList.add("hidden");
-    jobs.forEach((j) => el.jobsList.appendChild(jobRow(j)));
+    jobs.slice(0, state.pastJobsLimit).forEach((j) => el.jobsList.appendChild(jobRow(j)));
   }
 
   function jobRow(j) {
@@ -1074,6 +1080,10 @@
 
   el.pastJobsBtn.addEventListener("click", toggleJobs);
   el.refreshJobsBtn.addEventListener("click", fetchPastJobs);
+  el.moreJobsBtn.addEventListener("click", () => {
+    state.pastJobsLimit += JOBS_PAGE_SIZE;
+    renderJobs();
+  });
 
   el.queueList.addEventListener("click", async (e) => {
     const btn = e.target.closest(".q-btn");
@@ -1107,7 +1117,9 @@
   });
   setInterval(checkHealth, 15000);
   setInterval(refreshQueue, 2500);
-  setInterval(fetchPastJobs, 10000);
+  setInterval(() => {
+    if (state.pastJobsOpen && !document.hidden) fetchPastJobs();
+  }, 10000);
 
   try {
     const saved = localStorage.getItem("ve.device");

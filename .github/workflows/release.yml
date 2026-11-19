@@ -1,194 +1,46 @@
 name: Create Release
 
 on:
-  # Manual trigger — choose the version when you run it from the Actions tab
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.1.0)'
+        description: 'Release version (e.g. 1.1.0) — run this workflow from main'
         required: true
-        default: '1.1.0'
+        type: string
       draft:
-        description: 'Create as draft release?'
-        required: false
+        description: 'Create as a draft release?'
         type: boolean
         default: false
 
-  # Run Playwright UI tests on PRs targeting dev or main
-  # Auto-release when a PR is merged into main (dev → main via PR)
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - closed
-    branches:
-      - dev
-      - main
+permissions:
+  contents: read
 
 jobs:
-  # ---------------------------------------------------------------- UI tests
-  test:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # --- Python setup (for the uvicorn server) ---
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      # --- Node.js setup (for Playwright) ---
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Node dependencies
-        run: |
-          npm ci
-
-      - name: Install Playwright browsers
-        run: |
-          npx playwright install chromium
-
-      # --- Start the server ---
-      - name: Start uvicorn server
-        run: |
-          python -m uvicorn server:app --host 127.0.0.1 --port 8000 &
-        shell: bash
-        continue-on-error: true
-
-      - name: Wait for server to be ready
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
-              echo "Server is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Server failed to start"
-          exit 1
-
-      # --- Seed mock past jobs (output/ is gitignored, empty in CI) ---
-      - name: Create mock past jobs
-        run: |
-          python - << 'PY'
-          import json, os, wave, struct
-          output = "output"
-          os.makedirs(output, exist_ok=True)
-          for i in range(3):
-            jid = f"mock{i:04d}abcd1234"
-            jdir = os.path.join(output, jid)
-            os.makedirs(jdir, exist_ok=True)
-            # Create a 1-second silent WAV
-            for stem in ("karaoke", "vocals"):
-              path = os.path.join(jdir, f"{stem}.wav")
-              with wave.open(path, "wb") as w:
-                w.setnchannels(2)
-                w.setsampwidth(2)
-                w.setframerate(44100)
-                w.writeframes(b"\x00\x00" * 44100 * 2)
-            meta = {
-              "id": jid,
-              "filename": f"mock_song_{i}.mp3",
-              "model": "htdemucs",
-              "device": "cpu",
-              "device_used": "cpu",
-              "status": "done",
-              "timestamp": "2026-11-20T00:00:00+00:00",
-              "result": {
-                "karaoke": f"/outputs/{jid}/karaoke.wav",
-                "vocals": f"/outputs/{jid}/vocals.wav",
-              },
-            }
-            with open(os.path.join(jdir, "meta.json"), "w") as f:
-              json.dump(meta, f)
-          print("Mock jobs created")
-          PY
-
-      # --- Run Playwright tests ---
-      - name: Run Playwright tests
-        run: |
-          npx playwright test --project chromium
-
-  # ---------------------------------------------------------------- Release
   release:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.merged) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    timeout-minutes: 10
+    concurrency:
+      group: releases-main
+      queue: max # Do not replace pending releases when multiple PRs merge.
     permissions:
-      contents: write   # needed to create tags and releases
-      pull-requests: read
+      contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: 0        # need full history to derive previous tags
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Determine release version
-        id: version
-        run: |
-          # Auto-bump: take latest tag, increment patch
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
-          PATCH=$((PATCH + 1))
-          VERSION="$MAJOR.$MINOR.$PATCH"
-          # Strip any leading 'v' so the tag is clean
-          VERSION=$(echo "$VERSION" | sed 's/^v//')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        run: |
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: "Release ${{ steps.version.outputs.tag }}"
-          body: |
-            ## Release ${{ steps.version.outputs.tag }}
-
-            Merged PR: ${{ github.event.pull_request.title }}
-            PR #${{ github.event.pull_request.number }}
-
-            ### What's included
-            - CPU install fix: PyTorch CPU wheel index URL added to `setup.ps1`
-            - Interactive GPU/CPU choice during setup (`setup.ps1` now prompts)
-            - New `start.bat` launcher — double-click to setup or start the app
-            - Past Jobs page — browse, play, and download previous separations
-            - Prerequisites: Python 3.9–3.12, FFmpeg on PATH
-
-            ### Install
-            1. Download the source ZIP below (or `git clone`)
-            2. Double-click `start.bat`
-            3. Choose **1) First-time setup**, then **2) Start the app**
-            4. Open http://localhost:8000 in your browser
-
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+      - name: Publish release with generated notes
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DRAFT: ${{ inputs.draft }}
+        run: bash .github/scripts/release.sh

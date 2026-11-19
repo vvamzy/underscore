@@ -1,72 +1,67 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-test.use({ baseURL: 'http://localhost:8000' });
-
-test.beforeEach(async ({ page }) => {
-  // Navigate to the app
+test('lists a saved separation and plays its karaoke WAV', async ({ page }) => {
   await page.goto('/');
-
-  // Wait for the server pill to show online (server is up and JS has run)
-  await expect(page.locator('#serverPill')).toContainText('AI server', { timeout: 15000 });
-});
-
-test('Past Jobs page lists previous separations and plays a track', async ({ page }) => {
-  // Click the Past jobs button
-  await page.locator('#pastJobsBtn').click();
-
-  // The jobs card should appear
+  await expect(page.locator('#serverPill')).toHaveClass(/\bonline\b/);
+  await page.getByRole('button', { name: 'Past jobs' }).click();
   await expect(page.locator('#jobsCard')).toBeVisible();
-
-  // Wait for jobs to load from the API
-  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
-
-  // Check that at least one job row exists
-  const jobRows = page.locator('.job-row');
-  await expect(jobRows.first()).toBeVisible();
-
-  // Click the first job's Karaoke play button
-  const firstKaraokeBtn = page.locator('button').filter({ hasText: '▶ Karaoke' }).first();
-  await expect(firstKaraokeBtn).toBeVisible();
-  await firstKaraokeBtn.click();
-
-  // The workspace should appear
+  await expect(page.locator('.job-row')).toContainText('fixture.wav');
+  await expect(page.locator('#jobsCount')).toHaveText('1 job');
+  await page.getByRole('button', { name: '▶ Karaoke', exact: true }).click();
   await expect(page.locator('#workspace')).toBeVisible();
   await expect(page.locator('#dropzone')).toBeHidden();
-
-  // Check that the player is playing (pause icon visible, not play icon)
-  await page.waitForTimeout(1000);
-  const pauseIcon = page.locator('#playBtn #iconPause');
-  await expect(pauseIcon).not.toHaveClass('hidden');
+  await expect.poll(() => page.locator('#player').evaluate((element) => {
+    const audio = element as HTMLAudioElement;
+    return !audio.paused && audio.currentTime > 0 && audio.currentSrc.endsWith('/karaoke.wav');
+  })).toBe(true);
 });
 
-test('Past jobs download buttons are present and distinct', async ({ page }) => {
-  await page.locator('#pastJobsBtn').click();
-
-  // Wait for jobs to load from the API
-  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
-
-  // Check download buttons exist with distinct labels
-  const karaokeDlBtn = page.locator('button').filter({ hasText: '↓ Karaoke WAV' }).first();
-  const vocalsDlBtn = page.locator('button').filter({ hasText: '↓ Vocals WAV' }).first();
-
-  await expect(karaokeDlBtn).toBeVisible();
-  await expect(vocalsDlBtn).toBeVisible();
-  await expect(karaokeDlBtn).toHaveText(/Karaoke/);
-  await expect(vocalsDlBtn).toHaveText(/Vocals/);
+test('downloads both saved WAVs with distinct filenames', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Past jobs' }).click();
+  for (const [label, stem] of [['Karaoke', 'karaoke'], ['Vocals', 'vocals']]) {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: `↓ ${label} WAV` }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe(`fixture_${stem}.wav`);
+    expect(download.url()).toMatch(new RegExp(`/${stem}\\.wav$`));
+    expect(await download.failure()).toBeNull();
+  }
 });
 
-test('Refresh button reloads jobs', async ({ page }) => {
-  await page.locator('#pastJobsBtn').click();
+test('refresh requests a fresh list of saved jobs', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Past jobs' }).click();
+  await expect(page.locator('.job-row')).toHaveCount(1);
+  await page.route('**/api/past-jobs', (route) => route.fulfill({ json: { jobs: [] } }));
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.getByText('No past jobs yet.', { exact: false })).toBeVisible();
+  await expect(page.locator('#jobsCount')).toHaveText('0 jobs');
+});
 
-  // Wait for jobs to load from the API
-  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
+test('shows older jobs on demand', async ({ page }) => {
+  const jobs = Array.from({ length: 51 }, (_, i) => ({ id: String(i), filename: `track ${i}` }));
+  await page.route('**/api/past-jobs', (route) => route.fulfill({ json: { jobs } }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Past jobs' }).click();
+  await expect(page.locator('.job-row')).toHaveCount(50);
+  const more = page.getByRole('button', { name: 'Show more jobs' });
+  await more.click();
+  await expect(page.locator('.job-row')).toHaveCount(51);
+  await expect(more).toBeHidden();
+});
 
-  const jobsBefore = await page.locator('.job-row').count();
-  expect(jobsBefore).toBeGreaterThan(0);
-
-  await page.locator('#refreshJobsBtn').click();
-  await page.waitForTimeout(2000);
-
-  const jobsAfter = await page.locator('.job-row').count();
-  expect(jobsAfter).toBe(jobsBefore);
+test('health reports torch status and saved audio has no permissive CORS header', async ({ request }) => {
+  const origin = 'http://localhost:8000';
+  const health = await request.get('/api/health', { headers: { Origin: origin } });
+  expect(health.ok()).toBe(true);
+  expect(await health.json()).toHaveProperty('torch');
+  expect(health.headers()['access-control-allow-origin']).toBe(origin);
+  const headers = { Origin: 'https://example.invalid' };
+  for (const path of ['/api/past-jobs', '/outputs/000000000001/karaoke.wav']) {
+    const response = await request.get(path, { headers });
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['access-control-allow-origin']).toBeUndefined();
+  }
 });
