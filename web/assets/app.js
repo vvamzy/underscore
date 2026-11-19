@@ -1033,11 +1033,13 @@
       el.durTime.textContent = dur;
       el.curTime.textContent = "0:00";
 
+      // Use the blob URL we already have — avoids re-fetching from the server
+      // which can trigger a download instead of playback in some browsers.
       const urlObj = URL.createObjectURL(new Blob([ab], { type: "audio/wav" }));
       state.urls.push(urlObj);
       state.stems[stem] = { url: urlObj, blob: new Blob([ab], { type: "audio/wav" }) };
       state.active = stem;
-      el.player.src = url;
+      el.player.src = urlObj;
       el.player.load();
       el.player.play().catch(() => {});
       el.dropzone.classList.add("hidden");
