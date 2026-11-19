@@ -41,6 +41,8 @@
     karaokeMeta: $("karaokeMeta"), vocalsTitle: $("vocalsTitle"),
     vocalsMeta: $("vocalsMeta"), originalMeta: $("originalMeta"),
     player: $("player"),
+    pastJobsBtn: $("pastJobsBtn"), jobsCard: $("jobsCard"),
+    refreshJobsBtn: $("refreshJobsBtn"), jobsList: $("jobsList"), jobsEmpty: $("jobsEmpty"),
   };
 
   const state = {
@@ -57,6 +59,7 @@
     server: { online: false, demucs: false, device: null, detecting: true, cuda: false },
     currentJob: null,
     urls: [],
+    pastJobsOpen: false,
   };
 
   /* -------------------- misc UI -------------------- */
@@ -99,6 +102,7 @@
     }
     renderServer();
     refreshQueue();
+    fetchPastJobs();
   }
 
   function renderDeviceSelect() {
@@ -934,6 +938,110 @@
     }
   }
 
+  /* -------------------- past jobs -------------------- */
+  async function fetchPastJobs() {
+    try {
+      const res = await fetch(`${API}/api/past-jobs`);
+      if (!res.ok) throw new Error("bad past-jobs response");
+      const data = await res.json();
+      renderJobs(Array.isArray(data.jobs) ? data.jobs : []);
+    } catch {
+      // silent — server may not have the endpoint yet on older installs
+    }
+  }
+
+  const JOB_MODEL = { htdemucs: "Demucs", htdemucs_ft: "Demucs FT" };
+
+  function renderJobs(jobs) {
+    el.jobsList.textContent = "";
+    if (!jobs.length) {
+      el.jobsEmpty.classList.remove("hidden");
+      return;
+    }
+    el.jobsEmpty.classList.add("hidden");
+    jobs.forEach((j) => el.jobsList.appendChild(jobRow(j)));
+  }
+
+  function jobRow(j) {
+    const wrap = document.createElement("div");
+    wrap.className = "job-row";
+    wrap.dataset.jid = j.id;
+
+    const ts = j.timestamp ? new Date(j.timestamp).toLocaleString() : "—";
+    const name = document.createElement("div");
+    name.className = "j-name";
+    name.textContent = j.filename || "(file)";
+
+    const meta = document.createElement("div");
+    meta.className = "j-meta";
+    const parts = [JOB_MODEL[j.model] || j.model || "—"];
+    if (j.device_used) parts.push(j.device_used.toUpperCase());
+    parts.push(ts);
+    meta.textContent = parts.join(" · ");
+
+    const status = document.createElement("span");
+    status.className = "j-chip done";
+    status.textContent = j.status || "done";
+
+    const acts = document.createElement("div");
+    acts.className = "j-actions";
+
+    if (j.has_karaoke) {
+      acts.appendChild(jobBtn("▶ Karaoke", `karaoke-${j.id}`, () => playPast(j.id, "karaoke", j.filename)));
+      acts.appendChild(jobBtn("↓ WAV", `dl-karaoke-${j.id}`, () => downloadPast(j.id, "karaoke", j.filename)));
+    }
+    if (j.has_vocals) {
+      acts.appendChild(jobBtn("▶ Vocals", `vocals-${j.id}`, () => playPast(j.id, "vocals", j.filename)));
+      acts.appendChild(jobBtn("↓ WAV", `dl-vocals-${j.id}`, () => downloadPast(j.id, "vocals", j.filename)));
+    }
+
+    wrap.append(name, meta, status, acts);
+    return wrap;
+  }
+
+  function jobBtn(label, id, onClick) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = id;
+    b.className = "btn small ghost";
+    b.textContent = label;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function playPast(jid, stem, filename) {
+    const url = `${API}/outputs/${jid}/${stem}.wav`;
+    el.player.src = url;
+    el.player.load();
+    el.player.play().catch(() => {});
+    el.trackName.textContent = filename || "track";
+    el.trackSub.textContent = `${stem} · past job`;
+    el.dropzone.classList.add("hidden");
+    el.workspace.classList.remove("hidden");
+    resetChips();
+    state.active = stem;
+  }
+
+  function downloadPast(jid, stem, filename) {
+    const base = (filename || "track").replace(/\.[^.]+$/, "") || "track";
+    const url = `${API}/outputs/${jid}/${stem}.wav`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${base}_${stem}.wav`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function toggleJobs() {
+    state.pastJobsOpen = !state.pastJobsOpen;
+    el.jobsCard.classList.toggle("hidden", !state.pastJobsOpen);
+    if (state.pastJobsOpen) fetchPastJobs();
+  }
+
+  el.pastJobsBtn.addEventListener("click", toggleJobs);
+  el.refreshJobsBtn.addEventListener("click", fetchPastJobs);
+
   el.queueList.addEventListener("click", async (e) => {
     const btn = e.target.closest(".q-btn");
     if (!btn) return;
@@ -966,6 +1074,7 @@
   });
   setInterval(checkHealth, 15000);
   setInterval(refreshQueue, 2500);
+  setInterval(fetchPastJobs, 10000);
 
   try {
     const saved = localStorage.getItem("ve.device");
