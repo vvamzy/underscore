@@ -1,0 +1,5 @@
+# Web server, also used by UI CI without the AI runtime.
+fastapi>=0.111
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+psutil>=5.9

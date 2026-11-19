@@ -10,17 +10,19 @@ Run with:  .venv\\Scripts\\python.exe -m uvicorn server:app --host 127.0.0.1 --p
 from __future__ import annotations
 
 import importlib.util
+import json
+import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from queue import Queue
-from datetime import datetime, timezone
-import json
 
 try:
     import psutil  # used for pause / resume / cancel of running subprocesses
@@ -35,18 +37,20 @@ from starlette.background import BackgroundTask
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
-OUTPUT = ROOT / "output"
-OUTPUT.mkdir(exist_ok=True)
+OUTPUT = Path(os.environ.get("UNDERSCORE_OUTPUT_DIR", ROOT / "output")).resolve()
+OUTPUT.mkdir(parents=True, exist_ok=True)
+logger = logging.getLogger("uvicorn.error.underscore")
 
 MAX_UPLOAD_BYTES = 300 * 1024 * 1024  # 300 MB
 ALLOWED_MODELS = {"htdemucs", "htdemucs_ft"}
 ALLOWED_DEVICES = {"auto", "cpu", "gpu"}
 MAX_FINISHED_JOBS = 25
+LOCAL_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
 
 app = FastAPI(title="Underscore Server", docs_url="/api/docs")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=LOCAL_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,14 +64,19 @@ ENV: dict = {"device": None, "torch": None, "detecting": True}
 
 def _detect() -> None:
     try:
+        if importlib.util.find_spec("torch") is None:
+            ENV["device"] = "unavailable"
+            return
         import torch  # type: ignore
 
         ENV["torch"] = torch.__version__
         ENV["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     except Exception:
+        logger.exception("PyTorch device detection failed")
         ENV["torch"] = None
         ENV["device"] = "unavailable"
-    ENV["detecting"] = False
+    finally:
+        ENV["detecting"] = False
 
 
 threading.Thread(target=_detect, daemon=True, name="env-detect").start()
@@ -127,6 +136,43 @@ def _prune() -> None:
     for jid in finished[: max(0, len(finished) - MAX_FINISHED_JOBS)]:
         jobs.pop(jid, None)
         # Keep files on disk so the Past Jobs page can list them after restart.
+
+
+def _prune_output() -> None:
+    """Keep the newest completed jobs on disk only when explicitly enabled."""
+    raw_limit = os.environ.get("UNDERSCORE_KEEP_JOBS", "").strip()
+    if not raw_limit:
+        return
+    try:
+        limit = int(raw_limit)
+        if limit < 1:
+            raise ValueError
+    except ValueError:
+        logger.warning("Ignoring UNDERSCORE_KEEP_JOBS: expected a positive integer")
+        return
+
+    completed = []
+    try:
+        for path in OUTPUT.iterdir():
+            if not re.fullmatch(r"[0-9a-f]{12}", path.name):
+                continue
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (
+                getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            ):
+                continue
+            if all((path / name).is_file() for name in ("karaoke.wav", "vocals.wav")):
+                completed.append((info.st_mtime_ns, path))
+    except OSError:
+        logger.exception("Could not scan saved jobs for retention")
+        return
+
+    for _, path in sorted(completed, reverse=True)[limit:]:
+        try:
+            shutil.rmtree(path)
+            logger.info("Retention removed saved job %s", path.name)
+        except OSError:
+            logger.exception("Could not remove saved job %s", path.name)
 
 
 def _run_demucs(cmd: list[str], job: dict) -> int:
@@ -263,6 +309,7 @@ def _run_job(job: dict) -> None:
         "result": job.get("result"),
     }
     (jdir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    _prune_output()
 
 
 def _finish_cancelled(job: dict | None) -> None:
@@ -285,12 +332,14 @@ def _worker() -> None:
         except JobCancelled:
             _finish_cancelled(jobs.get(jid))
         except Exception as exc:  # noqa: BLE001 — surface any failure to the UI
+            logger.exception("Separation job %s failed", jid)
             if jobs.get(jid) is not None:
                 jobs[jid].update(status="error", detail=str(exc))
         finally:
             queue.task_done()
 
 
+_prune_output()
 threading.Thread(target=_worker, daemon=True, name="job-worker").start()
 
 
@@ -304,6 +353,7 @@ def health() -> dict:
         "ok": True,
         "demucs": importlib.util.find_spec("demucs") is not None,
         "device": detected,
+        "torch": ENV.get("torch"),
         "cuda": detected == "cuda",
         "cpu": True,
         "detecting": ENV.get("detecting", True),
@@ -404,9 +454,15 @@ def past_jobs() -> dict:
     """List completed jobs persisted on disk, newest first."""
     items: list[dict] = []
     if OUTPUT.exists():
-        for jdir in sorted(OUTPUT.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-            if not jdir.is_dir():
+        directories = []
+        for jdir in OUTPUT.iterdir():
+            try:
+                if jdir.is_dir():
+                    directories.append((jdir.stat().st_mtime, jdir))
+            except FileNotFoundError:
+                # The worker may remove an older directory during the scan.
                 continue
+        for mtime, jdir in sorted(directories, reverse=True):
             meta = jdir / "meta.json"
             karaoke = jdir / "karaoke.wav"
             vocals = jdir / "vocals.wav"
@@ -415,9 +471,11 @@ def past_jobs() -> dict:
             if meta.exists():
                 try:
                     data = json.loads(meta.read_text(encoding="utf-8"))
-                except Exception:
+                except (OSError, ValueError):
                     data = {}
             else:
+                data = {}
+            if not isinstance(data, dict):
                 data = {}
             items.append(
                 {
@@ -426,7 +484,7 @@ def past_jobs() -> dict:
                     "model": data.get("model"),
                     "device_used": data.get("device_used"),
                     "status": data.get("status", "done"),
-                    "timestamp": data.get("timestamp", ""),
+                    "timestamp": data.get("timestamp") or datetime.fromtimestamp(mtime, timezone.utc).isoformat(),
                     "has_karaoke": karaoke.exists(),
                     "has_vocals": vocals.exists(),
                 }

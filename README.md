@@ -28,6 +28,7 @@ Everything runs **locally on your machine**; your audio never touches the intern
 - **Full job control** — watch the live server queue, see your position, **pause / resume** a running extraction (frees your CPU/GPU), or **cancel** it anytime.
   <img src="docs/processing-queue.png" alt="Live server queue with pause / resume / cancel controls" width="620"/>
 - **Pick your compute device** — Auto, CPU-only, or GPU per job. The server auto-falls back to CPU if the GPU runs out of memory.
+- **Past jobs** — replay or download separated stems after a restart. The newest 50 jobs are shown first; use **Show more jobs** for older results.
 - **Private by design** — binds to `127.0.0.1`, no cloud calls, no telemetry.
 
 ## 🚀 Quick start (Windows)
@@ -97,6 +98,7 @@ The **first AI run downloads the model (~90 MB)** automatically; later runs are 
 underscore/
 ├── .github/
 │   └── workflows/
+│       ├── ci.yml        lint, retention tests, and Playwright on PRs
 │       └── release.yml   auto tagging + GitHub Releases on PR merge to main
 ├── web/                 the website (vanilla HTML/CSS/JS, no build step)
 │   ├── index.html
@@ -119,9 +121,25 @@ underscore/
 ## 🔒 Privacy
 
 - The web server listens on **127.0.0.1** (your computer only).
-- Audio files are stored in `output/<job-id>/` and deleted with the job prune logic;
-  clear the folder any time.
+- Audio results are stored in `output/<job-id>/` and kept by default. To remove them
+  manually, stop the app and delete only the job folders you no longer need.
 - No analytics, no cloud calls, no telemetry.
+
+### Optional retention
+
+To keep only the newest 25 completed jobs on disk, start the app from PowerShell:
+
+```powershell
+$env:UNDERSCORE_KEEP_JOBS = '25'
+powershell -ExecutionPolicy Bypass -File start.ps1
+```
+
+When set to a positive integer, retention permanently deletes older job folders
+with both stems at startup and after successful separations. This includes older
+jobs without `meta.json`. Back up any results you want to keep before enabling it.
+Unset `UNDERSCORE_KEEP_JOBS` (`Remove-Item Env:UNDERSCORE_KEEP_JOBS`) before the next
+launch to disable cleanup. `/api/health` reports the detected device and PyTorch
+version; device and job failures are logged in the launcher console.
 
 ## 🌿 Branching & releases
 
@@ -129,6 +147,15 @@ underscore/
 - **`main`** is protected — no direct pushes. Changes reach `main` only via pull request.
 - **Workflow:** create a feature branch from `dev` → push → open PR → merge into `dev` → when ready to release, open PR `dev → main`.
 - **Auto-releases:** when a PR is merged into `main`, GitHub Actions automatically bumps the patch version, creates a tag (e.g. `v1.1.1`), and publishes a GitHub Release with source ZIP and release notes.
+- **Manual releases:** in **Actions → Create Release → Run workflow**, select `main` and enter an unused version (e.g. `1.2.0`). Select **draft** if you want to review the release before publishing.
+
+### Local checks
+
+After running Windows setup, run `npm ci`, `npx playwright install chromium`, and
+`npm test` from the project folder (Node.js 24 recommended). The tests start a
+separate server on port `8765` with disposable audio fixtures. They can run while
+the regular app is open on port `8000`. To test retention separately, run
+`.\.venv\Scripts\python.exe -m unittest discover -s tests`.
 
 ## 🧯 Troubleshooting
 
