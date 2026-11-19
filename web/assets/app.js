@@ -1011,17 +1011,42 @@
     return b;
   }
 
-  function playPast(jid, stem, filename) {
+  async function playPast(jid, stem, filename) {
     const url = `${API}/outputs/${jid}/${stem}.wav`;
-    el.player.src = url;
-    el.player.load();
-    el.player.play().catch(() => {});
-    el.trackName.textContent = filename || "track";
-    el.trackSub.textContent = `${stem} · past job`;
-    el.dropzone.classList.add("hidden");
-    el.workspace.classList.remove("hidden");
-    resetChips();
-    state.active = stem;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ab = await res.arrayBuffer();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const buf = await ctx.decodeAudioData(ab);
+      ctx.close();
+
+      resetStems();
+      state.buffer = buf;
+      state.peaks = computePeaks(buf, 1600);
+      const dur = fmtTime(buf.duration);
+      const size = ab.byteLength;
+      el.trackName.textContent = filename || "track";
+      el.trackSub.textContent = `${stem} · past job · ${dur} · ${fmtSize(size)}`;
+      el.originalMeta.textContent = `${dur} · ${fmtSize(size)}`;
+      el.durTime.textContent = dur;
+      el.curTime.textContent = "0:00";
+
+      const urlObj = URL.createObjectURL(new Blob([ab], { type: "audio/wav" }));
+      state.urls.push(urlObj);
+      state.stems[stem] = { url: urlObj, blob: new Blob([ab], { type: "audio/wav" }) };
+      state.active = stem;
+      el.player.src = url;
+      el.player.load();
+      el.player.play().catch(() => {});
+      el.dropzone.classList.add("hidden");
+      el.workspace.classList.remove("hidden");
+      resetChips();
+      drawWave();
+    } catch (err) {
+      banner(`Couldn't play that track: ${err && err.message ? err.message : err}`);
+    }
   }
 
   function downloadPast(jid, stem, filename) {

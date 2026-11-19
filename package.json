@@ -1,0 +1,28 @@
+{
+  "name": "vocal-extractor",
+  "version": "1.0.0",
+  "description": "*\"Songs are something you vibe to; music is something you feel.\"* — vvamzy",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vvamzy/underscore.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/vvamzy/underscore/issues"
+  },
+  "homepage": "https://github.com/vvamzy/underscore#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "playwright": "^1.65.1"
+  }
+}
