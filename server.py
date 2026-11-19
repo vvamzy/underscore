@@ -19,6 +19,8 @@ import threading
 import uuid
 from pathlib import Path
 from queue import Queue
+from datetime import datetime, timezone
+import json
 
 try:
     import psutil  # used for pause / resume / cancel of running subprocesses
@@ -124,7 +126,7 @@ def _prune() -> None:
     finished = [jid for jid, j in jobs.items() if j.get("status") in ("done", "error")]
     for jid in finished[: max(0, len(finished) - MAX_FINISHED_JOBS)]:
         jobs.pop(jid, None)
-        shutil.rmtree(OUTPUT / jid, ignore_errors=True)
+        # Keep files on disk so the Past Jobs page can list them after restart.
 
 
 def _run_demucs(cmd: list[str], job: dict) -> int:
@@ -249,6 +251,18 @@ def _run_job(job: dict) -> None:
             "vocals": f"/outputs/{job['id']}/vocals.wav",
         },
     )
+    # Persist metadata so Past Jobs can list this job after server restart.
+    meta = {
+        "id": job["id"],
+        "filename": job.get("filename", "track"),
+        "model": job.get("model"),
+        "device": job.get("device"),
+        "device_used": job.get("device_used"),
+        "status": "done",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "result": job.get("result"),
+    }
+    (jdir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def _finish_cancelled(job: dict | None) -> None:
@@ -382,6 +396,41 @@ def _queued_position(jid: str) -> int:
 def get_queue() -> dict:
     """Current server queue — everything from waitlist to finished jobs."""
     items = [_public(j) | {"position": _queued_position(j["id"])} for j in jobs.values()]
+    return {"jobs": items}
+
+
+@app.get("/api/past-jobs")
+def past_jobs() -> dict:
+    """List completed jobs persisted on disk, newest first."""
+    items: list[dict] = []
+    if OUTPUT.exists():
+        for jdir in sorted(OUTPUT.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+            if not jdir.is_dir():
+                continue
+            meta = jdir / "meta.json"
+            karaoke = jdir / "karaoke.wav"
+            vocals = jdir / "vocals.wav"
+            if not meta.exists() and not (karaoke.exists() or vocals.exists()):
+                continue
+            if meta.exists():
+                try:
+                    data = json.loads(meta.read_text(encoding="utf-8"))
+                except Exception:
+                    data = {}
+            else:
+                data = {}
+            items.append(
+                {
+                    "id": jdir.name,
+                    "filename": data.get("filename", "track"),
+                    "model": data.get("model"),
+                    "device_used": data.get("device_used"),
+                    "status": data.get("status", "done"),
+                    "timestamp": data.get("timestamp", ""),
+                    "has_karaoke": karaoke.exists(),
+                    "has_vocals": vocals.exists(),
+                }
+            )
     return {"jobs": items}
 
 
