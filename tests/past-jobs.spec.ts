@@ -18,7 +18,7 @@ test('Past Jobs page lists previous separations and plays a track', async ({ pag
   await expect(page.locator('#jobsCard')).toBeVisible();
 
   // Wait for jobs to load from the API
-  await page.waitForTimeout(2000);
+  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
 
   // Check that at least one job row exists
   const jobRows = page.locator('.job-row');
@@ -41,7 +41,9 @@ test('Past Jobs page lists previous separations and plays a track', async ({ pag
 
 test('Past jobs download buttons are present and distinct', async ({ page }) => {
   await page.locator('#pastJobsBtn').click();
-  await page.waitForTimeout(2000);
+
+  // Wait for jobs to load from the API
+  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
 
   // Check download buttons exist with distinct labels
   const karaokeDlBtn = page.locator('button').filter({ hasText: '↓ Karaoke WAV' }).first();
@@ -55,7 +57,9 @@ test('Past jobs download buttons are present and distinct', async ({ page }) => 
 
 test('Refresh button reloads jobs', async ({ page }) => {
   await page.locator('#pastJobsBtn').click();
-  await page.waitForTimeout(2000);
+
+  // Wait for jobs to load from the API
+  await page.waitForSelector('.job-row', { state: 'visible', timeout: 10000 });
 
   const jobsBefore = await page.locator('.job-row').count();
   expect(jobsBefore).toBeGreaterThan(0);

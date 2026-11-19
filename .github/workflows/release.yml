@@ -81,6 +81,43 @@ jobs:
           echo "Server failed to start"
           exit 1
 
+      # --- Seed mock past jobs (output/ is gitignored, empty in CI) ---
+      - name: Create mock past jobs
+        run: |
+          python - << 'PY'
+          import json, os, wave, struct
+          output = "output"
+          os.makedirs(output, exist_ok=True)
+          for i in range(3):
+            jid = f"mock{i:04d}abcd1234"
+            jdir = os.path.join(output, jid)
+            os.makedirs(jdir, exist_ok=True)
+            # Create a 1-second silent WAV
+            for stem in ("karaoke", "vocals"):
+              path = os.path.join(jdir, f"{stem}.wav")
+              with wave.open(path, "wb") as w:
+                w.setnchannels(2)
+                w.setsampwidth(2)
+                w.setframerate(44100)
+                w.writeframes(b"\x00\x00" * 44100 * 2)
+            meta = {
+              "id": jid,
+              "filename": f"mock_song_{i}.mp3",
+              "model": "htdemucs",
+              "device": "cpu",
+              "device_used": "cpu",
+              "status": "done",
+              "timestamp": "2026-11-20T00:00:00+00:00",
+              "result": {
+                "karaoke": f"/outputs/{jid}/karaoke.wav",
+                "vocals": f"/outputs/{jid}/vocals.wav",
+              },
+            }
+            with open(os.path.join(jdir, "meta.json"), "w") as f:
+              json.dump(meta, f)
+          print("Mock jobs created")
+          PY
+
       # --- Run Playwright tests ---
       - name: Run Playwright tests
         run: |
