@@ -32,6 +32,16 @@ Everything runs **locally on your machine**; your audio never touches the intern
 
 ## 🚀 Quick start (Windows)
 
+**Easiest way — double-click `start.bat`:**
+
+```text
+1) First-time setup  (run once, installs Python packages)
+2) Start the app     (everyday use - opens http://localhost:8000)
+3) Exit
+```
+
+Or run the scripts directly:
+
 ```powershell
 # 1) One-time setup (installs Python packages, ~250 MB)
 powershell -ExecutionPolicy Bypass -File setup.ps1
@@ -43,8 +53,9 @@ powershell -ExecutionPolicy Bypass -File start.ps1
 `start.ps1` prints the URL and opens **http://localhost:8000** automatically.
 Then: **drop an audio file → pick a mode → extract karaoke → download**.
 
-> Have an NVIDIA GPU? Rerun `setup.ps1 -Gpu` once (~2.5 GB CUDA download) and AI
-> separation becomes roughly 10× faster.
+> Have an NVIDIA GPU? Setup will ask whether you want GPU (CUDA) support
+> interactively (~2.5 GB CUDA download), or rerun `setup.ps1 -Gpu` to skip the
+> prompt. AI separation becomes roughly 10× faster on GPU.
 
 ## 📋 Prerequisites
 
@@ -84,12 +95,16 @@ The **first AI run downloads the model (~90 MB)** automatically; later runs are 
 
 ```
 underscore/
+├── .github/
+│   └── workflows/
+│       └── release.yml   auto tagging + GitHub Releases on PR merge to main
 ├── web/                 the website (vanilla HTML/CSS/JS, no build step)
 │   ├── index.html
 │   └── assets/
 ├── server.py            local API: serves the site + runs Demucs jobs (FastAPI)
 ├── requirements.txt     Python dependencies
-├── setup.ps1            one-time install (use -Gpu for NVIDIA)
+├── setup.ps1            one-time install (prompts for GPU/CPU choice)
+├── start.bat            Windows double-click launcher (setup or start menu)
 ├── start.ps1            start server & open the browser
 └── output/              separation results (created automatically, git-ignored)
 ```
@@ -107,6 +122,13 @@ underscore/
 - Audio files are stored in `output/<job-id>/` and deleted with the job prune logic;
   clear the folder any time.
 - No analytics, no cloud calls, no telemetry.
+
+## 🌿 Branching & releases
+
+- **`dev`** is the default branch. All feature work branches off `dev`.
+- **`main`** is protected — no direct pushes. Changes reach `main` only via pull request.
+- **Workflow:** create a feature branch from `dev` → push → open PR → merge into `dev` → when ready to release, open PR `dev → main`.
+- **Auto-releases:** when a PR is merged into `main`, GitHub Actions automatically bumps the patch version, creates a tag (e.g. `v1.1.1`), and publishes a GitHub Release with source ZIP and release notes.
 
 ## 🧯 Troubleshooting
 
