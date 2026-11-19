@@ -954,6 +954,7 @@
 
   function renderJobs(jobs) {
     el.jobsList.textContent = "";
+    if (el.jobsCount) el.jobsCount.textContent = `${jobs.length} job${jobs.length !== 1 ? "s" : ""}`;
     if (!jobs.length) {
       el.jobsEmpty.classList.remove("hidden");
       return;
