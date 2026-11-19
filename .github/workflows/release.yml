@@ -14,16 +14,119 @@ on:
         type: boolean
         default: false
 
+  # Run Playwright UI tests on PRs targeting dev or main
   # Auto-release when a PR is merged into main (dev → main via PR)
   pull_request:
     types:
+      - opened
+      - synchronize
+      - reopened
       - closed
     branches:
+      - dev
       - main
 
 jobs:
+  # ---------------------------------------------------------------- UI tests
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- Python setup (for the uvicorn server) ---
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # --- Node.js setup (for Playwright) ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        run: |
+          npm ci
+
+      - name: Install Playwright browsers
+        run: |
+          npx playwright install chromium
+
+      # --- Start the server ---
+      - name: Start uvicorn server
+        run: |
+          python -m uvicorn server:app --host 127.0.0.1 --port 8000 &
+        shell: bash
+        continue-on-error: true
+
+      - name: Wait for server to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
+              echo "Server is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Server failed to start"
+          exit 1
+
+      # --- Seed mock past jobs (output/ is gitignored, empty in CI) ---
+      - name: Create mock past jobs
+        run: |
+          python - << 'PY'
+          import json, os, wave, struct
+          output = "output"
+          os.makedirs(output, exist_ok=True)
+          for i in range(3):
+            jid = f"mock{i:04d}abcd1234"
+            jdir = os.path.join(output, jid)
+            os.makedirs(jdir, exist_ok=True)
+            # Create a 1-second silent WAV
+            for stem in ("karaoke", "vocals"):
+              path = os.path.join(jdir, f"{stem}.wav")
+              with wave.open(path, "wb") as w:
+                w.setnchannels(2)
+                w.setsampwidth(2)
+                w.setframerate(44100)
+                w.writeframes(b"\x00\x00" * 44100 * 2)
+            meta = {
+              "id": jid,
+              "filename": f"mock_song_{i}.mp3",
+              "model": "htdemucs",
+              "device": "cpu",
+              "device_used": "cpu",
+              "status": "done",
+              "timestamp": "2026-11-20T00:00:00+00:00",
+              "result": {
+                "karaoke": f"/outputs/{jid}/karaoke.wav",
+                "vocals": f"/outputs/{jid}/vocals.wav",
+              },
+            }
+            with open(os.path.join(jdir, "meta.json"), "w") as f:
+              json.dump(meta, f)
+          print("Mock jobs created")
+          PY
+
+      # --- Run Playwright tests ---
+      - name: Run Playwright tests
+        run: |
+          npx playwright test --project chromium
+
+  # ---------------------------------------------------------------- Release
   release:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     permissions:
       contents: write   # needed to create tags and releases
       pull-requests: read
@@ -39,44 +142,28 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Check if PR was merged
-        id: merged
-        run: |
-          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-            echo "merged=true" >> $GITHUB_OUTPUT
-          else
-            echo "merged=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Determine release version
         id: version
-        if: steps.merged.outputs.merged == 'true'
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Auto-bump: take latest tag, increment patch
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
-            MAJOR=$(echo "$VERSION" | cut -d. -f1)
-            MINOR=$(echo "$VERSION" | cut -d. -f2)
-            PATCH=$(echo "$VERSION" | cut -d. -f3)
-            PATCH=$((PATCH + 1))
-            VERSION="$MAJOR.$MINOR.$PATCH"
-          fi
+          # Auto-bump: take latest tag, increment patch
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          PATCH=$((PATCH + 1))
+          VERSION="$MAJOR.$MINOR.$PATCH"
           # Strip any leading 'v' so the tag is clean
           VERSION=$(echo "$VERSION" | sed 's/^v//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
-        if: steps.merged.outputs.merged == 'true'
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
-        if: steps.merged.outputs.merged == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -91,6 +178,7 @@ jobs:
             - CPU install fix: PyTorch CPU wheel index URL added to `setup.ps1`
             - Interactive GPU/CPU choice during setup (`setup.ps1` now prompts)
             - New `start.bat` launcher — double-click to setup or start the app
+            - Past Jobs page — browse, play, and download previous separations
             - Prerequisites: Python 3.9–3.12, FFmpeg on PATH
 
             ### Install
@@ -99,7 +187,7 @@ jobs:
             3. Choose **1) First-time setup**, then **2) Start the app**
             4. Open http://localhost:8000 in your browser
 
-          draft: ${{ github.event.inputs.draft || false }}
+          draft: false
           prerelease: false
           generate_release_notes: true
         env:

@@ -14,3 +14,8 @@ output/
 *.log
 .DS_Store
 Thumbs.db
+
+# Node.js / Playwright
+node_modules/
+playwright-report/
+test-results/
