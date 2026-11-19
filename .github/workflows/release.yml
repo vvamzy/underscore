@@ -14,8 +14,10 @@ on:
         type: boolean
         default: false
 
-  # Auto-release on push to main (auto-bumps patch version)
-  push:
+  # Auto-release when a PR is merged into main (dev → main via PR)
+  pull_request:
+    types:
+      - closed
     branches:
       - main
 
@@ -24,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # needed to create tags and releases
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,8 +39,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Check if PR was merged
+        id: merged
+        run: |
+          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            echo "merged=true" >> $GITHUB_OUTPUT
+          else
+            echo "merged=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Determine release version
         id: version
+        if: steps.merged.outputs.merged == 'true'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -57,17 +70,22 @@ jobs:
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create and push tag
+        if: steps.merged.outputs.merged == 'true'
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
+        if: steps.merged.outputs.merged == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "Release ${{ steps.version.outputs.tag }}"
           body: |
             ## Release ${{ steps.version.outputs.tag }}
+
+            Merged PR: ${{ github.event.pull_request.title }}
+            PR #${{ github.event.pull_request.number }}
 
             ### What's included
             - CPU install fix: PyTorch CPU wheel index URL added to `setup.ps1`
