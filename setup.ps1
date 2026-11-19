@@ -19,6 +19,14 @@ Write-Host "  Underscore - setup" -ForegroundColor Magenta
 Write-Host "  ================================="
 Write-Host ""
 
+# ---------------------------------------------------------------- GPU choice (interactive)
+if (-not $Gpu) {
+    $gpuChoice = Read-Host "Install GPU (CUDA) support? (requires NVIDIA driver >= 530) [y/N]"
+    if ($gpuChoice -match '^y$|^yes$') {
+        $Gpu = $true
+    }
+}
+
 # ---------------------------------------------------------------- Python 3.9-3.12
 function Find-BasePython {
     $candidates = @()
@@ -103,7 +111,8 @@ if ($Gpu) {
         "--index-url", "https://download.pytorch.org/whl/cu121")
 } else {
     $torchArgs = @("-m", "pip", "install",
-        "torch==2.3.1+cpu", "torchaudio==2.3.1+cpu")
+        "torch==2.3.1+cpu", "torchaudio==2.3.1+cpu",
+        "--index-url", "https://download.pytorch.org/whl/cpu")
 }
 & $venvPy @torchArgs
 if ($LASTEXITCODE -ne 0) { Write-Host "  PyTorch install failed." -ForegroundColor Red; exit 1 }

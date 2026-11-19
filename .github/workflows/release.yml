@@ -1,0 +1,89 @@
+name: Create Release
+
+on:
+  # Manual trigger — choose the version when you run it from the Actions tab
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.1.0)'
+        required: true
+        default: '1.1.0'
+      draft:
+        description: 'Create as draft release?'
+        required: false
+        type: boolean
+        default: false
+
+  # Optional: auto-release on push to main (auto-bumps patch version)
+  # Uncomment the block below to enable auto-release on every main push
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create tags and releases
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # need full history to derive previous tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Auto-bump: take latest tag, increment patch
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            VERSION=$(echo "$LATEST_TAG" | sed 's/^v//')
+            MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            MINOR=$(echo "$VERSION" | cut -d. -f2)
+            PATCH=$(echo "$VERSION" | cut -d. -f3)
+            PATCH=$((PATCH + 1))
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+          # Strip any leading 'v' so the tag is clean
+          VERSION=$(echo "$VERSION" | sed 's/^v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Release ${{ steps.version.outputs.tag }}"
+          body: |
+            ## Release ${{ steps.version.outputs.tag }}
+
+            ### What's included
+            - CPU install fix: PyTorch CPU wheel index URL added to `setup.ps1`
+            - Interactive GPU/CPU choice during setup (`setup.ps1` now prompts)
+            - New `start.bat` launcher — double-click to setup or start the app
+            - Prerequisites: Python 3.9–3.12, FFmpeg on PATH
+
+            ### Install
+            1. Download the source ZIP below (or `git clone`)
+            2. Double-click `start.bat`
+            3. Choose **1) First-time setup**, then **2) Start the app**
+            4. Open http://localhost:8000 in your browser
+
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
