@@ -1014,38 +1014,41 @@
   async function playPast(jid, stem, filename) {
     const url = `${API}/outputs/${jid}/${stem}.wav`;
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const ab = await res.arrayBuffer();
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      const buf = await ctx.decodeAudioData(ab);
-      ctx.close();
-
-      resetStems();
-      state.buffer = buf;
-      state.peaks = computePeaks(buf, 1600);
-      const dur = fmtTime(buf.duration);
-      const size = ab.byteLength;
-      el.trackName.textContent = filename || "track";
-      el.trackSub.textContent = `${stem} · past job · ${dur} · ${fmtSize(size)}`;
-      el.originalMeta.textContent = `${dur} · ${fmtSize(size)}`;
-      el.durTime.textContent = dur;
-      el.curTime.textContent = "0:00";
-
-      // Use the blob URL we already have — avoids re-fetching from the server
-      // which can trigger a download instead of playback in some browsers.
-      const urlObj = URL.createObjectURL(new Blob([ab], { type: "audio/wav" }));
-      state.urls.push(urlObj);
-      state.stems[stem] = { url: urlObj, blob: new Blob([ab], { type: "audio/wav" }) };
-      state.active = stem;
-      el.player.src = urlObj;
+      // Play directly from the server URL — StaticFiles serves it inline,
+      // no re-fetch or blob URL needed (which caused download behavior).
+      el.player.src = url;
       el.player.load();
       el.player.play().catch(() => {});
+      el.trackName.textContent = filename || "track";
+      el.trackSub.textContent = `${stem} · past job`;
       el.dropzone.classList.add("hidden");
       el.workspace.classList.remove("hidden");
       resetChips();
-      drawWave();
+      state.active = stem;
+
+      // Decode separately for waveform + duration display
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const ab = await res.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const buf = await ctx.decodeAudioData(ab);
+        ctx.close();
+
+        resetStems();
+        state.buffer = buf;
+        state.peaks = computePeaks(buf, 1600);
+        const dur = fmtTime(buf.duration);
+        const size = ab.byteLength;
+        el.trackSub.textContent = `${stem} · past job · ${dur} · ${fmtSize(size)}`;
+        el.originalMeta.textContent = `${dur} · ${fmtSize(size)}`;
+        el.durTime.textContent = dur;
+        el.curTime.textContent = "0:00";
+        drawWave();
+      } catch (decodeErr) {
+        // Non-fatal — playback still works, just no waveform
+      }
     } catch (err) {
       banner(`Couldn't play that track: ${err && err.message ? err.message : err}`);
     }
