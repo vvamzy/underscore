@@ -968,9 +968,11 @@
     wrap.dataset.jid = j.id;
 
     const ts = j.timestamp ? new Date(j.timestamp).toLocaleString() : "—";
+    const displayName = j.filename && j.filename !== "track" ? j.filename : `Job ${j.id.slice(-6)}`;
     const name = document.createElement("div");
     name.className = "j-name";
-    name.textContent = j.filename || "(file)";
+    name.textContent = displayName;
+    name.title = j.filename ? j.filename : `Job ID: ${j.id}`;
 
     const meta = document.createElement("div");
     meta.className = "j-meta";
@@ -988,11 +990,11 @@
 
     if (j.has_karaoke) {
       acts.appendChild(jobBtn("▶ Karaoke", `karaoke-${j.id}`, () => playPast(j.id, "karaoke", j.filename)));
-      acts.appendChild(jobBtn("↓ WAV", `dl-karaoke-${j.id}`, () => downloadPast(j.id, "karaoke", j.filename)));
+      acts.appendChild(jobBtn("↓ Karaoke WAV", `dl-karaoke-${j.id}`, () => downloadPast(j.id, "karaoke", j.filename)));
     }
     if (j.has_vocals) {
       acts.appendChild(jobBtn("▶ Vocals", `vocals-${j.id}`, () => playPast(j.id, "vocals", j.filename)));
-      acts.appendChild(jobBtn("↓ WAV", `dl-vocals-${j.id}`, () => downloadPast(j.id, "vocals", j.filename)));
+      acts.appendChild(jobBtn("↓ Vocals WAV", `dl-vocals-${j.id}`, () => downloadPast(j.id, "vocals", j.filename)));
     }
 
     wrap.append(name, meta, status, acts);
