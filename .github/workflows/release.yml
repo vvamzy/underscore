@@ -15,27 +15,22 @@ on:
         default: false
 
   # Run Playwright UI tests on PRs targeting dev or main
+  # Auto-release when a PR is merged into main (dev → main via PR)
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
-    branches:
-      - dev
-      - main
-
-  # Auto-release when a PR is merged into main (dev → main via PR)
-  pull_request:
-    types:
       - closed
     branches:
+      - dev
       - main
 
 jobs:
   # ---------------------------------------------------------------- UI tests
   test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     permissions:
       contents: read
     steps:
